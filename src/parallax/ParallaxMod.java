@@ -20,6 +20,7 @@ public class ParallaxMod extends Mod{
 
     // {layer, base k}
     //TEMP stuff 
+    //basically layer map :D couldve use Objectmap or somethin but EH
     static final float[][] layers = {
         {Layer.block,      0.02f},
         {Layer.turret,     0.04f},
