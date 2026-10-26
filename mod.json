@@ -1,10 +1,10 @@
 {
-    "name": "mod-template",
-    "displayName": "Mod Template",
-    "description": "Mindustry Java mod template, complete with EntityAnno integration.",
+    "name": "parallax",
+    "displayName": "ParallaxMod",
+    "description": "Mindustry Java Parallax mod",
     "version": "1.0.0",
     "minGameVersion": "160",
-    "author": "You",
+    "author": "Zeniku",
     "java": true,
-    "main": "template.ModTemplate"
+    "main": "parallax.ParallaxMod"
 }
