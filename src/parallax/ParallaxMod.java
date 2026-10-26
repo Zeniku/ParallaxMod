@@ -1,9 +1,11 @@
 package parallax;
+
 import arc.*;
+import arc.graphics.Color;
 import arc.graphics.g2d.*;
 import arc.math.geom.*;
-import arc.util.*;
 import arc.math.*;
+import arc.util.*;
 import mindustry.content.Blocks;
 import mindustry.game.EventType.*;
 import mindustry.graphics.*;
@@ -11,30 +13,48 @@ import mindustry.mod.*;
 import mindustry.world.*;
 import mindustry.world.blocks.defense.Wall;
 import mindustry.world.blocks.environment.StaticWall;
+import mindustry.world.meta.BlockGroup;
 
 import static mindustry.Vars.*;
 
 public class ParallaxMod extends Mod{
     static boolean enabled = true;
-    static float strength = 2f;
+    static float strength = 0.8f;
+
+    // base height of each group (multiplied by strength every frame)
+    static final float
+        baseWalls = 0.02f,   // static map walls + the darkness overlay (must match)
+        baseUnder = 0f,      // cached "under" buildings (0 = flat), also Layer.blockUnder
+        baseBlock = 0.02f;   // Layer.block: uncached blocks + cached "normal" buildings
+
+    // current frame values (base * strength), shared with drawSides / kFor
+    static float wallK, underK, blockK;
 
     // {layer, base k}
-    //TEMP stuff 
-    //basically layer map :D couldve use Objectmap or somethin but EH
     static final float[][] layers = {
-        {Layer.block,      0.02f},
-        {Layer.turret,     0.04f},
-        {Layer.flyingUnit, 0.08f},
-        {Layer.bullet,     0.10f},
-        {Layer.effect,     0.12f},
+        {Layer.blockUnder,    baseUnder},
+        {Layer.block,         baseBlock},   // also covers cracks, additive, props, blockOver, blockBuilding
+        {Layer.turret,        0.04f},
+        {Layer.groundUnit,    0.01f},
+        {Layer.power,         baseBlock},   // lines meet node tops
+        {Layer.legUnit,       0.04f},
+        {Layer.darkness,      baseWalls},   // must match the wall height
+        {Layer.plans,         baseBlock},
+        {Layer.flyingUnitLow, 0.04f},
+        {Layer.bullet,        0.04f},
+        {Layer.effect,        0.04f},
+        {Layer.flyingUnit,    0.04f},
+        {Layer.overlayUI, 0.04f}
     };
 
     // order matches dirs: left, right, bottom, top
     static final int[][] dirs = {{-1,0},{1,0},{0,-1},{0,1}};
-    //block side "shades"
-    static final float[] shade = {0.75f, 0.55f, 0.85f, 0.65f};
+    static final float[] shade = {0.55f, 0.75f, 0.65f, 0.85f};
     static final Mat mat = new Mat();
-    static final Mat savedCam = new Mat();
+
+    // camera matrices for the cached draws (walls + building cache)
+    static final Mat base = new Mat(), tmp = new Mat();
+    static final Color fallback = Color.valueOf("555555");
 
     @Override
     public void init(){
@@ -45,14 +65,14 @@ public class ParallaxMod extends Mod{
             }
 
             float cx = Core.camera.position.x, cy = Core.camera.position.y;
-            float blockK = layers[0][1] * strength ;
+            wallK = baseWalls * strength;
+            underK = baseUnder * strength;
+            blockK = baseBlock * strength;
 
             Draw.draw(Layer.floor - 1f, () -> Draw.trans(mat.idt()));
 
-            drawSides(cx, cy, blockK);
-
-            // since blocks are like multiple layers
-            scaleCamera(Layer.block - 0.501f, Layer.block + 0.001f, blockK);
+            drawSides(cx, cy);
+            scaleGroups(cx, cy);
 
             for(float[] l : layers){
                 float z = l[0], k = l[1] * strength;
@@ -64,34 +84,61 @@ public class ParallaxMod extends Mod{
                 });
             }
 
-            // keep ui safe plsss
-            Draw.draw(10000f, () -> Draw.trans(mat.idt()));
+            // dont let anything on top be affected
+            Draw.draw(Layer.flyingUnit + 0.5f, () -> Draw.trans(mat.idt()));
         });
 
-        //PLSSSSS
         Events.run(Trigger.uiDrawBegin, () -> Draw.trans(mat.idt()));
     }
-    
-    // determine if block is tall
-    static boolean tall(Tile t){
-        return t != null && t.block() != Blocks.air && (t.block() instanceof Wall || t.block() instanceof StaticWall);
-    }
 
-    static void scaleCamera(float zFrom, float zTo, float k){
-        float cx = Core.camera.position.x, cy = Core.camera.position.y;
-        //start
-        Draw.draw(zFrom, () -> {
-            savedCam.set(Core.camera.mat);
-            Core.camera.mat.translate(cx, cy).scale(1f + k, 1f + k).translate(-cx, -cy);
+    /*
+     * Scales the cached draws (they bypass Draw.trans): 
+     * static walls and the two building cache layers. 
+     * so just Scale the camera itself
+    */
+    static void scaleGroups(float cx, float cy){
+        base.set(Core.camera.mat); // unscaled at this moment
+
+        // under cache (its callback at block - 0.5 binds camera.mat)
+        Draw.draw(Layer.block - 0.501f, () -> setCam(underK, cx, cy));
+        Draw.draw(Layer.block - 0.499f, () -> Core.camera.mat.set(base));
+
+        // static walls (drawn at block - 0.09)
+        Draw.draw(Layer.block - 0.1f, () -> setCam(wallK, cx, cy));
+        Draw.draw(Layer.block - 0.08f, () -> Core.camera.mat.set(base));
+
+        // normal cache: rebind the shader uniform before it draws at block
+        Draw.draw(Layer.block - 0.0005f, () -> {
+            tmp.set(base).translate(cx, cy).scale(1f + blockK, 1f + blockK).translate(-cx, -cy);
+            SpriteCache.getDefaultShader().bind();
+            SpriteCache.getDefaultShader().setUniformMatrix4("u_projectionViewMatrix", tmp);
         });
-        //reset
-        Draw.draw(zTo, () -> Core.camera.mat.set(savedCam));
     }
 
-    static void drawSides(float cx, float cy, float k){
-        //side
-        float s = 1f + k;
+    // set the camera
+    static void setCam(float k, float cx, float cy){
+        Core.camera.mat.set(base).translate(cx, cy).scale(1f + k, 1f + k).translate(-cx, -cy);
+    }
 
+    // determines which blocks are considered "tall"
+    static boolean tall(Tile t){
+        return t != null && t.block() != Blocks.air && t.block().solid
+            || (t.block() instanceof Wall || t.block() instanceof StaticWall);
+    }
+
+    /** Height of a block's top face, matching whichever group it is drawn in. */
+    static float kFor(Block b){
+        if(b instanceof StaticWall) return wallK;
+        if(b.drawCached) return b.buildingCacheLayer == BuildingCacheLayer.under ? underK : blockK;
+        return blockK;
+    }
+
+    static Color baseColor(Block b){
+        Color c = b.mapColor;
+        return c == null || c.r + c.g + c.b < 0.03f ? fallback : c;
+    }
+
+    static void drawSides(float cx, float cy){
         float h = tilesize / 2f;
 
         Core.camera.bounds(Tmp.r1);
@@ -100,20 +147,19 @@ public class ParallaxMod extends Mod{
         int x1 = Math.min((int)((Tmp.r1.x + Tmp.r1.width) / tilesize) + 2, world.width() - 1);
         int y1 = Math.min((int)((Tmp.r1.y + Tmp.r1.height) / tilesize) + 2, world.height() - 1);
 
-        // draw under walls / block pls?
-        Draw.z(Layer.block - 0.003f);
+        // draw before blocks so it "culls"
+        Draw.z(Layer.blockUnder - 0.01f);
 
-
-        // might change it later
         for(int ty = y0; ty <= y1; ty++){
             for(int tx = x0; tx <= x1; tx++){
                 Tile t = world.tile(tx, ty);
                 if(!tall(t)) continue;
 
+                float s = 1f + kFor(t.block());
                 float wx = tx * tilesize, wy = ty * tilesize;
 
                 for(int i = 0; i < 4; i++){
-                    int[] d = dirs[i]; // couldve use Geom.d4 or somethin
+                    int[] d = dirs[i];
                     if(tall(world.tile(tx + d[0], ty + d[1]))) continue; // buried edge
 
                     float mx = wx + d[0] * h, my = wy + d[1] * h;
@@ -125,10 +171,8 @@ public class ParallaxMod extends Mod{
                     float bx2 = cx + (bx - cx) * s, by2 = cy + (by - cy) * s;
 
                     float c = shade[i];
-                    Tmp.c1.set(t.block().mapColor).mul(c, c, c, 1f);
-                    // Draws like mapcolor which doesnt exist
+                    Tmp.c1.set(baseColor(t.block())).mul(c, c, c, 1f);
                     Draw.color(Tmp.c1);
-                    //couldve shouldve use draw.rect now do i
                     Fill.quad(ax, ay, bx, by, bx2, by2, ax2, ay2);
                 }
             }
