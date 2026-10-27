@@ -3,7 +3,6 @@ package parallax;
 import arc.*;
 import arc.graphics.Color;
 import arc.graphics.g2d.*;
-import arc.math.geom.*;
 import arc.math.*;
 import arc.util.*;
 import mindustry.content.Blocks;
@@ -13,7 +12,6 @@ import mindustry.mod.*;
 import mindustry.world.*;
 import mindustry.world.blocks.defense.Wall;
 import mindustry.world.blocks.environment.StaticWall;
-import mindustry.world.meta.BlockGroup;
 
 import static mindustry.Vars.*;
 
