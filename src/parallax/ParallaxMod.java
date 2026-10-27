@@ -19,7 +19,7 @@ import static mindustry.Vars.*;
 
 public class ParallaxMod extends Mod{
     static boolean enabled = true;
-    static float strength = 0.8f;
+    static float strength = 0.82f;
 
     // base height of each group (multiplied by strength every frame)
     static final float
@@ -35,7 +35,7 @@ public class ParallaxMod extends Mod{
         {Layer.blockUnder,    baseUnder},
         {Layer.block,         baseBlock},   // also covers cracks, additive, props, blockOver, blockBuilding
         {Layer.turret,        0.04f},
-        {Layer.groundUnit,    0.01f},
+        {Layer.groundUnit,    0.03f},
         {Layer.power,         baseBlock},   // lines meet node tops
         {Layer.legUnit,       0.04f},
         {Layer.darkness,      baseWalls},   // must match the wall height
@@ -123,7 +123,7 @@ public class ParallaxMod extends Mod{
     // determines which blocks are considered "tall"
     static boolean tall(Tile t){
         return t != null && t.block() != Blocks.air && t.block().solid
-            || (t.block() instanceof Wall || t.block() instanceof StaticWall);
+            || (t.block() instanceof Wall || t.block() instanceof StaticWall) ;
     }
 
     /** Height of a block's top face, matching whichever group it is drawn in. */
@@ -148,7 +148,7 @@ public class ParallaxMod extends Mod{
         int y1 = Math.min((int)((Tmp.r1.y + Tmp.r1.height) / tilesize) + 2, world.height() - 1);
 
         // draw before blocks so it "culls"
-        Draw.z(Layer.blockUnder - 0.01f);
+        Draw.z(Layer.blockUnder + 0.01f);
 
         for(int ty = y0; ty <= y1; ty++){
             for(int tx = x0; tx <= x1; tx++){
@@ -160,6 +160,8 @@ public class ParallaxMod extends Mod{
 
                 for(int i = 0; i < 4; i++){
                     int[] d = dirs[i];
+                    Tile tile = world.tile(tx + d[0], ty + d[1]);
+                    if(tile == null) continue;
                     if(tall(world.tile(tx + d[0], ty + d[1]))) continue; // buried edge
 
                     float mx = wx + d[0] * h, my = wy + d[1] * h;
