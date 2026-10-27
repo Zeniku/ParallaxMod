@@ -1,3 +1,5 @@
+## ParallaxMod
+its just adds subtle parallax to the camera
 
 ## Building
 

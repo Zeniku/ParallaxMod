@@ -1,7 +1,7 @@
 {
     "name": "parallax",
     "displayName": "ParallaxMod",
-    "description": "Mindustry Java Parallax mod",
+    "description": "Mindustry Java Parallax mod for Psudo 3D look",
     "version": "1.0.0",
     "minGameVersion": "160",
     "author": "Zeniku",
